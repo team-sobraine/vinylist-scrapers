@@ -1,41 +1,113 @@
 import requests
 from bs4 import BeautifulSoup
-import os
-import time
+import sys
 
-IMAGE_URL_BASE = 'https://www.menartshop.hr'
+class PageError(Exception):
+    def __init__(self, message='PageError occurred'):
+        super().__init__(message)
 
-def scrape(url_base, pages):
-    catalog = []
-    for i in range(1, pages+1):
-        print(f"ON PAGE {i}")
-        # TESTING ONLY
-        #
-        # FILE = 'site.html'
-        # if os.path.exists(FILE):
-        #     with open(FILE, 'r') as f:
-        #         site = f.read()
-        # else:
-        #     r = requests.get(url_base)
-        #     with open(FILE, 'w') as f:
-        #         site = str(r.content, 'UTF-8')
-        #         f.write(site)
-        
-        # PRODUCTION ONLY
-        #
-        r = requests.get(url_base+str(i))
-        site = str(r.content, 'UTF-8')
+MENART_SHOP_ID = '63c29ccc3e3f1267bbf97c67'
+MAX_PAGE = 262
 
-        soup = BeautifulSoup(site, 'html.parser')
-        elements = soup.find_all(class_='webshopNewItem')
+def get_page(page):
+    if (page < 1) or (page > MAX_PAGE):
+        print(f'ERROR @ get_url(): page {page} does not exist')
+        sys.exit()
+    return f'https://www.menartshop.hr/kategorija-proizvoda/glazba/page/{page}/?format-glazba=lp'
 
-        for element in elements:
-            image_css = element.find(class_='imgWrapper anim03').get('style')
-            image_url = IMAGE_URL_BASE + image_css[image_css.find('(')+1:image_css.find(')')]
-            title = element.find(class_='title').contents[0]
-            price1 = element.find(class_='primary-currency').contents[0][:-3]
-            price2 = element.find(class_='secondary-currency').contents[0][1:-1][:-4]
-            catalog.append([image_url, title, price1, price2])
-        #time.sleep(5)
+def scrape_page(page):
+    '''Gets all hrefs from all <a> tags reffering to vinyl pages'''
+    hrefs = []
+    page_url = get_page(page)
+    response = requests.get(page_url)
+    if response.status_code != 200:
+        print(f'ERROR @ scrape_page(): response.status_code = f{response.status_code}')
+        hrefs.append(None)
+    else:
+        soup = BeautifulSoup(response.content, 'html.parser')
+        cards = soup.find_all(class_='type-product')
+        for card in cards:
+            hrefs.append(card.find('a')['href'])
+    return hrefs
 
-    return catalog
+def scrape_details(href):
+    response = requests.get(href)
+    if response.status_code != 200:
+        print(f'ERROR @ scrape_details(): response.status_code = f{response.status_code}')
+        return None, None, None, None, None, None
+    name, author, coverURL, price, barcode, genres = None, None, None, None, None, None
+    soup = BeautifulSoup(response.content, 'html.parser')
+    name = soup.find(class_='product_title').text
+    try:
+        author = soup.find(class_='jet-listing-dynamic-terms__link').text
+    except AttributeError:
+        author = None
+    coverURL = soup.find(class_='wp-post-image')['src']
+    price = soup.find('p', class_='price').find('bdi').text[0:-2]
+    barcode = soup.find(class_='elementor-price-list').find_all('li')[4].find(class_='elementor-price-list-price').text
+    a_tags = soup.find(class_='elementor-price-list').find_all('li')[6].find(class_='elementor-price-list-price').find_all('a')
+    genres = []
+    for tag in a_tags:
+        genre = tag.text
+        if genre != 'Glazba':
+            genres.append(genre)
+    return name, author, coverURL, price, barcode, genres
+
+
+def main(hrefs_file=None, testing=False):
+    if testing:
+        MAX_PAGE = 0
+    # get hrefs to all
+    if hrefs_file == None:
+        hrefs = []
+        for i in range(1, MAX_PAGE + 1):
+            print(f'SCRAPING PAGE {i}')
+            hrefs += scrape_page(i)
+        # save to cache file
+        with open('hrefs.scraped', 'w') as f:
+            f.write(str(hrefs))
+    else:
+        # read cached hrefs
+        with open(hrefs_file, 'r') as f:
+            hrefs = f.read()
+        hrefs = hrefs[2:-2].split("', '") 
+
+    
+    # get info about each vinyl
+    vinyls = []
+    for i in range(0, len(hrefs)):
+        print(f'SCRAPING VINYL {i}')
+        vinyl = {
+            # ID: autogen by mongo,
+            'Name': None,
+            'Author': None,
+            'CoverURL': None,
+            'Price': None,
+            'Barcode': None, 
+            'Genres': [],
+            'SourceURL': hrefs[i],
+            'ShopID': MENART_SHOP_ID
+        }
+        data = scrape_details(hrefs[i])
+        vinyl['Name'] = data[0]
+        vinyl['Author'] = data[1]
+        vinyl['CoverURL'] = data[2]
+        vinyl['Price'] = data[3]
+        vinyl['Barcode'] = data[4]
+        vinyl['Genres'] = data[5]
+        vinyls.append(vinyl)
+        if testing:
+            break
+        print(vinyl)
+        if (i % 10 == 0):
+            with open(f'vinyls{i}.scraped', 'w', encoding="utf-8") as f:
+                for vinyl in vinyls:
+                    f.write(f"{vinyl['Name']} ||| {vinyl['Author']} ||| {vinyl['CoverURL']} ||| {vinyl['Price']} ||| {vinyl['Barcode']} ||| {vinyl['Genres']} ||| {vinyl['SourceURL']} ||| {vinyl['ShopID']}\n")
+
+
+if __name__ == '__main__':
+    hrefs_file = None
+    if len(sys.argv) > 0:
+        if '--cached-hrefs' in sys.argv:
+            hrefs_file = 'hrefs.scraped'
+    main(hrefs_file, testing=False)
