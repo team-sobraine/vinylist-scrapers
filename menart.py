@@ -2,10 +2,6 @@ import requests
 from bs4 import BeautifulSoup
 import sys
 
-class PageError(Exception):
-    def __init__(self, message='PageError occurred'):
-        super().__init__(message)
-
 MENART_SHOP_ID = '63c29ccc3e3f1267bbf97c67'
 MAX_PAGE = 262
 
