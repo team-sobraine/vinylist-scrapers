@@ -99,7 +99,9 @@ def main(hrefs_file=None, testing=False):
             with open(f'vinyls{i}.scraped', 'w', encoding="utf-8") as f:
                 for vinyl in vinyls:
                     f.write(f"{vinyl['Name']} ||| {vinyl['Author']} ||| {vinyl['CoverURL']} ||| {vinyl['Price']} ||| {vinyl['Barcode']} ||| {vinyl['Genres']} ||| {vinyl['SourceURL']} ||| {vinyl['ShopID']}\n")
-
+    with open(f'vinyls.scraped', 'w', encoding="utf-8") as f:
+        for vinyl in vinyls:
+            f.write(f"{vinyl['Name']} ||| {vinyl['Author']} ||| {vinyl['CoverURL']} ||| {vinyl['Price']} ||| {vinyl['Barcode']} ||| {vinyl['Genres']} ||| {vinyl['SourceURL']} ||| {vinyl['ShopID']}\n")
 
 if __name__ == '__main__':
     hrefs_file = None
