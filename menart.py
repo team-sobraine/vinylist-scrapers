@@ -51,6 +51,7 @@ def scrape_details(href):
 
 
 def main(hrefs_file=None, testing=False):
+    global MAX_PAGE
     if testing:
         MAX_PAGE = 0
     # get hrefs to all
