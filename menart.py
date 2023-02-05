@@ -1,6 +1,7 @@
 import requests
 from bs4 import BeautifulSoup
-import sys
+import sys 
+import json
 
 MENART_SHOP_ID = '63c29ccc3e3f1267bbf97c67'
 MAX_PAGE = 262
@@ -50,7 +51,7 @@ def scrape_details(href):
     return name, author, coverURL, price, barcode, genres
 
 
-def main(hrefs_file=None, testing=False):
+def main(hrefs_file=None, vinyls_file=None, testing=False):
     global MAX_PAGE
     if testing:
         MAX_PAGE = 0
@@ -69,44 +70,70 @@ def main(hrefs_file=None, testing=False):
             hrefs = f.read()
         hrefs = hrefs[2:-2].split("', '") 
 
+    if vinyls_file == None:
+        # get info about each vinyl
+        vinyls = []
+        for i in range(0, len(hrefs)):
+            print(f'SCRAPING VINYL {i}')
+            vinyl = {
+                # ID: autogen by mongo,
+                'Name': None,
+                'Author': None,
+                'CoverURL': None,
+                'Price': None,
+                'Barcode': None, 
+                'Genres': [],
+                'SourceURL': hrefs[i],
+                'ShopID': MENART_SHOP_ID
+            }
+            data = scrape_details(hrefs[i])
+            vinyl['Name'] = data[0]
+            vinyl['Author'] = data[1]
+            vinyl['CoverURL'] = data[2]
+            vinyl['Price'] = data[3]
+            vinyl['Barcode'] = data[4]
+            vinyl['Genres'] = data[5]
+            vinyls.append(vinyl)
+            if testing:
+                break
+            print(vinyl)
+            if (i % 10 == 0):
+                with open(f'vinyls{i}.scraped', 'w', encoding="utf-8") as f:
+                    for vinyl in vinyls:
+                        f.write(f"{vinyl['Name']} ||| {vinyl['Author']} ||| {vinyl['CoverURL']} ||| {vinyl['Price']} ||| {vinyl['Barcode']} ||| {vinyl['Genres']} ||| {vinyl['SourceURL']} ||| {vinyl['ShopID']}\n")
+        with open('vinyls.scraped', 'w', encoding="utf-8") as f:
+            for vinyl in vinyls:
+                f.write(f"{vinyl['Name']} ||| {vinyl['Author']} ||| {vinyl['CoverURL']} ||| {vinyl['Price']} ||| {vinyl['Barcode']} ||| {vinyl['Genres']} ||| {vinyl['SourceURL']} ||| {vinyl['ShopID']}\n")
     
-    # get info about each vinyl
-    vinyls = []
-    for i in range(0, len(hrefs)):
-        print(f'SCRAPING VINYL {i}')
-        vinyl = {
-            # ID: autogen by mongo,
-            'Name': None,
-            'Author': None,
-            'CoverURL': None,
-            'Price': None,
-            'Barcode': None, 
-            'Genres': [],
-            'SourceURL': hrefs[i],
-            'ShopID': MENART_SHOP_ID
-        }
-        data = scrape_details(hrefs[i])
-        vinyl['Name'] = data[0]
-        vinyl['Author'] = data[1]
-        vinyl['CoverURL'] = data[2]
-        vinyl['Price'] = data[3]
-        vinyl['Barcode'] = data[4]
-        vinyl['Genres'] = data[5]
-        vinyls.append(vinyl)
-        if testing:
-            break
-        print(vinyl)
-        if (i % 10 == 0):
-            with open(f'vinyls{i}.scraped', 'w', encoding="utf-8") as f:
-                for vinyl in vinyls:
-                    f.write(f"{vinyl['Name']} ||| {vinyl['Author']} ||| {vinyl['CoverURL']} ||| {vinyl['Price']} ||| {vinyl['Barcode']} ||| {vinyl['Genres']} ||| {vinyl['SourceURL']} ||| {vinyl['ShopID']}\n")
-    with open(f'vinyls.scraped', 'w', encoding="utf-8") as f:
-        for vinyl in vinyls:
-            f.write(f"{vinyl['Name']} ||| {vinyl['Author']} ||| {vinyl['CoverURL']} ||| {vinyl['Price']} ||| {vinyl['Barcode']} ||| {vinyl['Genres']} ||| {vinyl['SourceURL']} ||| {vinyl['ShopID']}\n")
+    else:
+        vinyls = []
+        with open('vinyls.scraped', 'r', encoding="utf-8") as f:
+            data = f.read().split('\n')
+        for vinyl in data:
+            item = vinyl.split(' ||| ')
+            vinyls.append(
+                {
+                    'Name': item[0],
+                    'Author': item[1],
+                    'CoverURL': item[2],
+                    'Price': item[3],
+                    'Barcode': item[4], 
+                    'Genres': item[5][2:-2].split("', '"),
+                    'SourceURL': item[6],
+                    'ShopID': item[7]
+                }
+            )
+
+    with open('catalog.json', mode='w', encoding='utf-8') as jsonfile:
+        jsonfile.write(json.dumps(vinyls, indent=4))
+
 
 if __name__ == '__main__':
     hrefs_file = None
+    vinyls_file = None
     if len(sys.argv) > 0:
         if '--cached-hrefs' in sys.argv:
             hrefs_file = 'hrefs.scraped'
-    main(hrefs_file, testing=False)
+        if '--cached-vinyls' in sys.argv:
+            vinyls_file = 'vinyls.scraped'
+    main(hrefs_file, vinyls_file, testing=False)
